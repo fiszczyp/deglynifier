@@ -18,6 +18,31 @@ logging.captureWarnings(True)
 logger = logging.getLogger(__name__)
 
 
+def strip_illegal_characters(string: str) -> str:
+    """
+    Remove characters that cannot form a path.
+
+    Parameters
+    ----------
+    string
+        String to be corrected.
+
+    Returns
+    -------
+        Corrected string with no illegal characters.
+
+    """
+    string = string.replace("/", "_")
+    string = string.replace("$", "_")
+    string = string.replace(":", "_")
+    string = string.replace("?", "_")
+    string = string.replace("'", "_")
+    string = string.replace("|", "_")
+    string = string.replace("\\", "_")
+
+    return string
+
+
 class NMRFolder:
     """
     A class containing basic NMR folder information.
@@ -99,11 +124,11 @@ class NMRFolder:
                 if m is not None:
                     if (sample_id := m.group(1).strip()) != "":
                         logger.info(f"Using the NAME field ({sample_id}).")
-                        return sample_id
+                        return strip_illegal_characters(sample_id)
                 logger.error("Unknown sample ID: saving as UNKNOWN.")
                 return "UNKNOWN"
             else:
-                return sample_id
+                return strip_illegal_characters(sample_id)
 
         else:
             logger.error("Unknown sample ID: saving as UNKNOWN.")
@@ -131,14 +156,8 @@ class NMRFolder:
         m = re.search(r"##\$EXP= <(.*)>", acqus_path.read_text())
 
         if m is not None:
-            exp_name = m.group(1).replace("\\", "_")
-            exp_name = exp_name.replace("/", "_")
-            exp_name = exp_name.replace("$", "_")
-            exp_name = exp_name.replace(":", "_")
-            exp_name = exp_name.replace("?", "_")
-            exp_name = exp_name.replace("'", "_")
-            exp_name = exp_name.replace("|", "_")
-            return m.group(1)
+            exp_name = m.group(1)
+            return strip_illegal_characters(exp_name)
 
         else:
             logger.critical("Experiment name not found - aborted!")
