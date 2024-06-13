@@ -109,29 +109,33 @@ class NMRFolder:
             Path to the TopSpin NMR data folder.
 
         """
+        try:
+            orig_path = nmr_path / "orig"
 
-        orig_path = nmr_path / "orig"
+            m = re.search(r"Sample ID\s*[:-]{0,2}(.*)", orig_path.read_text())
 
-        m = re.search(r"Sample ID\s*[:-]{0,2}(.*)", orig_path.read_text())
+            if m is not None:
+                sample_id = m.group(1).strip()
+                if sample_id == "":
+                    logger.error("Unknown sample ID: checking NAME field.")
+                    m = re.search(
+                        r"Name\s*[:-]{0,2}(.*):\s*Sample ID",
+                        orig_path.read_text(),
+                    )
+                    if m is not None:
+                        if (sample_id := m.group(1).strip()) != "":
+                            logger.info(f"Using the NAME field ({sample_id}).")
+                            return strip_illegal_characters(sample_id)
+                    logger.error("Unknown sample ID: saving as UNKNOWN.")
+                    return "UNKNOWN"
+                else:
+                    return strip_illegal_characters(sample_id)
 
-        if m is not None:
-            sample_id = m.group(1).strip()
-            if sample_id == "":
-                logger.error("Unknown sample ID: checking NAME field.")
-                m = re.search(
-                    r"Name\s*[:-]{0,2}(.*):\s*Sample ID", orig_path.read_text()
-                )
-                if m is not None:
-                    if (sample_id := m.group(1).strip()) != "":
-                        logger.info(f"Using the NAME field ({sample_id}).")
-                        return strip_illegal_characters(sample_id)
+            else:
                 logger.error("Unknown sample ID: saving as UNKNOWN.")
                 return "UNKNOWN"
-            else:
-                return strip_illegal_characters(sample_id)
 
-        else:
-            logger.error("Unknown sample ID: saving as UNKNOWN.")
+        except Exception:
             return "UNKNOWN"
 
     @staticmethod
