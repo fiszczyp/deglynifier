@@ -131,6 +131,13 @@ class NMRFolder:
         m = re.search(r"##\$EXP= <(.*)>", acqus_path.read_text())
 
         if m is not None:
+            exp_name = m.group(1).replace("\\", "_")
+            exp_name = exp_name.replace("/", "_")
+            exp_name = exp_name.replace("$", "_")
+            exp_name = exp_name.replace(":", "_")
+            exp_name = exp_name.replace("?", "_")
+            exp_name = exp_name.replace("'", "_")
+            exp_name = exp_name.replace("|", "_")
             return m.group(1)
 
         else:
