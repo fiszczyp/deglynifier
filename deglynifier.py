@@ -610,9 +610,11 @@ def main(
                     to_process.put(folder)
 
             while not to_process.empty():
-                inpath = to_process.get()
-                logger.info(f"Processing {inpath.parent.name}/{inpath.name}.")
-                watcher.process_folder(nmr_folder_path=inpath)
+                proc_path = to_process.get()
+                logger.info(
+                    f"Processing {proc_path.parent.name}/{proc_path.name}."
+                )
+                watcher.process_folder(nmr_folder_path=proc_path)
                 to_process.task_done()
                 logger.info("Folder processing finished.")
 
