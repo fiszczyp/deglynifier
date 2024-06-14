@@ -581,6 +581,8 @@ def main(
         for folder in infiles:
             to_process.put(folder)
 
+        del infiles
+
         logger.info(f"Will process {to_process.qsize()} folders.")
 
         while not to_process.empty():
