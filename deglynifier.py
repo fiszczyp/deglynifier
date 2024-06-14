@@ -381,6 +381,8 @@ class GlynWatcher:
                 folder["timestamp"] for folder in toml_data["processed"]
             )
 
+            del toml_data
+
         except Exception:
             logger.error("TOML decoding failed: starting from scratch!")
             watcher = cls(
