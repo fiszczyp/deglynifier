@@ -410,7 +410,7 @@ class GlynWatcher:
             inpath=nmr_folder_path,
             outdir=self.outpath,
         )
-        self.last_timestamp = self.inpath.stat().st_mtime
+        self.last_timestamp = nmr_folder_path.stat().st_mtime
         logger.debug(f"Last timestamp is: {self.last_timestamp}.")
         with open(self.toml_path, mode="a") as f:
             f.write(nmr_folder.to_toml_string() + "\n\n")
