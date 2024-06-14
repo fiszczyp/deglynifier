@@ -12,7 +12,7 @@ from shutil import copytree
 from typing import Optional
 
 __author__ = "Filip T. Szczypiński"
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 logging.captureWarnings(True)
 logger = logging.getLogger(__name__)
