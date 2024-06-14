@@ -32,15 +32,8 @@ def strip_illegal_characters(string: str) -> str:
         Corrected string with no illegal characters.
 
     """
-    string = string.replace("/", "_")
-    string = string.replace("$", "_")
-    string = string.replace(":", "_")
-    string = string.replace("?", "_")
-    string = string.replace("'", "_")
-    string = string.replace("|", "_")
-    string = string.replace("\\", "_")
-
-    return string
+    translation_table = str.maketrans("/$:?|'\\", "_______")
+    return string.translate(translation_table)
 
 
 class NMRFolder:
@@ -69,7 +62,7 @@ class NMRFolder:
         inpath: Path,
         outpath: Path,
         timestamp: float,
-    ):
+    ) -> None:
         """
         Initialise NMR data.
 
@@ -101,7 +94,10 @@ class NMRFolder:
         Get NMR sample name.
 
         Sample names are stored in the TopSpin's `orig` file, as:
-        Name :-RESEARCHER_NAME   :  Sample ID :-SAMPLE_NAME
+        Name :-RESEARCHER_NAME   :  Sample ID :-SAMPLE_NAME. If it cannot find
+        the SAMPLE_NAME, then it tries to use RESEARCHER_NAME. If that is also
+        empty - or any other error has occurred here - the sample name will
+        be set to UNKNOWN.
 
         Parameters
         ----------
@@ -109,34 +105,45 @@ class NMRFolder:
             Path to the TopSpin NMR data folder.
 
         """
+        sample_id = "UNKNOWN"
+        orig_path = nmr_path / "orig"
+
+        logging.debug(f"Trying to open {orig_path} to find the sample ID.")
+
         try:
-            orig_path = nmr_path / "orig"
-
-            m = re.search(r"Sample ID\s*[:-]{0,2}(.*)", orig_path.read_text())
-
-            if m is not None:
-                sample_id = m.group(1).strip()
-                if sample_id == "":
-                    logger.error("Unknown sample ID: checking NAME field.")
-                    m = re.search(
-                        r"Name\s*[:-]{0,2}(.*):\s*Sample ID",
-                        orig_path.read_text(),
-                    )
+            with orig_path.open() as file:
+                for line in file:
+                    m = re.search(r"Sample ID\s*[:-]{0,2}(.*)", line)
                     if m is not None:
-                        if (sample_id := m.group(1).strip()) != "":
-                            logger.info(f"Using the NAME field ({sample_id}).")
-                            return strip_illegal_characters(sample_id)
-                    logger.error("Unknown sample ID: saving as UNKNOWN.")
-                    return "UNKNOWN"
-                else:
-                    return strip_illegal_characters(sample_id)
+                        sample_id = m.group(1).strip()
+                        if sample_id:
+                            break
 
-            else:
-                logger.error("Unknown sample ID: saving as UNKNOWN.")
-                return "UNKNOWN"
-
+                        else:
+                            logger.error(
+                                "Unknown sample ID: checking NAME field."
+                            )
+                            m = re.search(
+                                r"Name\s*[:-]{0,2}(.*):\s*Sample ID",
+                                line,
+                            )
+                            if m is not None:
+                                sample_id = m.group(1).strip()
+                                if sample_id:
+                                    logger.info(
+                                        f"Using the NAME field ({sample_id})."
+                                    )
+                                else:
+                                    logger.error(
+                                        "Unknown sample ID: saving as UNKNOWN."
+                                    )
+                                    sample_id = "UNKNOWN"
+                                break
         except Exception:
+            logger.error("Error reading sample name: saving as UNKNOWN.")
             return "UNKNOWN"
+
+        return strip_illegal_characters(sample_id)
 
     @staticmethod
     def get_experiment_name(
@@ -157,15 +164,21 @@ class NMRFolder:
 
         acqus_path = nmr_path / "acqus"
 
-        m = re.search(r"##\$EXP= <(.*)>", acqus_path.read_text())
+        try:
+            with acqus_path.open() as file:
+                for line in file:
+                    m = re.search(r"##\$EXP= <(.*)>", line)
+                    if m is not None:
+                        exp_name = m.group(1)
+                        logger.info(f"Experiment type is: {exp_name}.")
+                        return strip_illegal_characters(exp_name)
 
-        if m is not None:
-            exp_name = m.group(1)
-            return strip_illegal_characters(exp_name)
+            logger.error("Experiment name not found - aborted!")
+            return "UNKNOWN"
 
-        else:
-            logger.critical("Experiment name not found - aborted!")
-            raise (AttributeError("Experiment name not found."))
+        except Exception:
+            logger.error("Error reading experiment name: saving as UNKNOWN.")
+            return "UNKNOWN"
 
     @classmethod
     def from_mif(
@@ -243,7 +256,7 @@ class NMRFolder:
         with open(toml_path, "a") as f:
             f.write(new_exp)
 
-    def to_toml_string(self):
+    def to_toml_string(self) -> str:
         """Get NMRFolder as a serialisable TOML string."""
         inpath = str(self.inpath).replace("\\", "/")
         outpath = str(self.outpath).replace("\\", "/")
@@ -275,8 +288,6 @@ class GlynWatcher:
         A path to dump file with the watcher status.
     last_timestamp
         A timestamp of the last processed NMR folder.
-    processed_folders
-        A list of already processed folders.
 
     """
 
@@ -286,9 +297,8 @@ class GlynWatcher:
         outpath: Path,
         toml_path: Path,
         last_timestamp: float = 0,
-        processed_folders: Optional[list[NMRFolder]] = None,
         clean: Optional[bool] = False,
-    ):
+    ) -> None:
         """
         Initialise the watcher.
 
@@ -312,10 +322,6 @@ class GlynWatcher:
         self.outpath = outpath
         self.toml_path = toml_path
         self.last_timestamp = last_timestamp
-        if processed_folders is not None:
-            self.processed_folders = processed_folders
-        else:
-            self.processed_folders = []
 
         inpath_str = str(self.inpath).replace("\\", "/")
         outpath_str = str(self.outpath).replace("\\", "/")
@@ -371,16 +377,6 @@ class GlynWatcher:
                 toml_path=toml_path,
             )
 
-            for folder in toml_data["processed"]:
-                nmr_folder = NMRFolder(
-                    nmr_sample=folder["nmr_sample"],
-                    experiment=folder["experiment"],
-                    inpath=Path(folder["inpath"]),
-                    outpath=Path(folder["outpath"]),
-                    timestamp=folder["timestamp"],
-                )
-                watcher.processed_folders.append(nmr_folder)
-
             watcher.last_timestamp = max(
                 folder["timestamp"] for folder in toml_data["processed"]
             )
@@ -414,19 +410,8 @@ class GlynWatcher:
         )
         self.last_timestamp = self.inpath.stat().st_mtime
         logger.debug(f"Last timestamp is: {self.last_timestamp}.")
-        self.processed_folders.append(nmr_folder)
         with open(self.toml_path, mode="a") as f:
             f.write(nmr_folder.to_toml_string() + "\n\n")
-
-    def to_toml(
-        self,
-        path: Path,
-    ) -> None:
-        """Get the watcher status as a TOML string."""
-        toml_string = "\n\n".join(
-            [folder.to_toml_string() for folder in self.processed_folders]
-        )
-        path.write_text(toml_string)
 
 
 def parse_arguments() -> argparse.Namespace:
